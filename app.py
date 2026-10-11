@@ -1,6 +1,6 @@
 """
-AI Survival Trader - Professional Mobile-Friendly Terminal
-=========================================================
+AI Survival Trader - Cyber Terminal Edition
+==========================================
 Paper trading only. An AI whose server life depends on its trading account.
 Every cycle = one trading day. If equity reaches zero, the server shuts down.
 
@@ -15,7 +15,7 @@ import os
 import random
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 import numpy as np
@@ -280,15 +280,13 @@ class Broker:
                 elif o >= t.tp:  px, st = o, "TP"
                 elif lo <= t.sl: px, st = t.sl, "SL"
                 elif h >= t.tp:  px, st = t.tp, "TP"
-                else:
-                    continue
+                else: continue
             else:
                 if o >= t.sl:    px, st = o, "SL"
                 elif o <= t.tp:  px, st = o, "TP"
                 elif h >= t.sl:  px, st = t.sl, "SL"
                 elif lo <= t.tp: px, st = t.tp, "TP"
-                else:
-                    continue
+                else: continue
             self.close(t, px, st, day)
             closed.append(t)
         return closed
@@ -348,12 +346,11 @@ class Brain:
         if not m.real:
             for ev in m.events[-4:]:
                 age = m.t - ev["day"]
-                if age > 5:
-                    continue
+                if age > 5: continue
                 w = 0.6 ** age
                 for s, e in ev["fx"].items():
                     geo[s] += e * w * 18
-                moves = ", ".join(f"{NAMES[s]} {e * 100:+.1f}%" for s, e in ev["fx"].items())
+                moves = ", ".join(f"{NAMES[s]} {e*100:+.1f}%" for s, e in ev["fx"].items())
                 when = "today" if age == 0 else f"{age}d ago"
                 lines.append(f"[intel {when}] {ev['text']} → {moves}")
             if not lines:
@@ -370,7 +367,7 @@ class Brain:
             if vix is not None:
                 ro += clip((vix - 20) / 8, -1, 1.5)
             s = clip(ro, -1.5, 1.5) / 1.5
-            geo.update(GOLD=0.30 * s, OIL=0.10 * s, BTC=-0.30 * s, EURUSD=-0.15 * s)
+            geo.update(GOLD=0.30*s, OIL=0.10*s, BTC=-0.30*s, EURUSD=-0.15*s)
             regime = "risk-off" if ro > 0.9 else "risk-on" if ro < -0.9 else "neutral"
             note = {"risk-off": "safe-haven bid, crypto sold",
                     "risk-on": "risk appetite up, gold ignored",
@@ -397,10 +394,8 @@ class Brain:
             why_hold = f"{len(opens)} positions open — risk budget spent"
         else:
             for a, s, sc in scored:
-                if a < thr:
-                    break
-                if s in opens:
-                    continue
+                if a < thr: break
+                if s in opens: continue
                 choice = (s, sc, a)
                 break
             if not choice:
@@ -474,12 +469,9 @@ class Brain:
 def parse_llm_json(text: str) -> Optional[dict]:
     text = re.sub(r"```(?:json)?", "", text)
     m = re.search(r"\{.*\}", text, re.S)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
+    if not m: return None
+    try: return json.loads(m.group(0))
+    except json.JSONDecodeError: return None
 
 
 def validate_llm(d: dict, sim: "Sim") -> tuple[Optional[Decision], str]:
@@ -491,21 +483,15 @@ def validate_llm(d: dict, sim: "Sim") -> tuple[Optional[Decision], str]:
         return Decision(thoughts, "HOLD", source="claude"), ""
     sym = str(d.get("symbol", "")).upper().replace("/", "").replace(" ", "")
     sym = {"BITCOIN": "BTC", "WTI": "OIL", "CRUDE": "OIL", "XAUUSD": "GOLD"}.get(sym, sym)
-    if sym not in ASSETS:
-        return None, f"unknown symbol {sym!r}"
-    try:
-        sl, tp = float(d["stop_loss"]), float(d["take_profit"])
-    except (KeyError, TypeError, ValueError):
-        return None, "missing stop/target"
+    if sym not in ASSETS: return None, f"unknown symbol {sym!r}"
+    try: sl, tp = float(d["stop_loss"]), float(d["take_profit"])
+    except (KeyError, TypeError, ValueError): return None, "missing stop/target"
     px = sim.market.price(sym)
     sign = 1 if action == "BUY" else -1
     sl_dist, tp_dist = (px - sl) * sign, (tp - px) * sign
-    if sl_dist <= 0 or tp_dist <= 0:
-        return None, "stop/target wrong side"
-    if not (0.003 <= sl_dist / px <= 0.08):
-        return None, "stop distance out of range"
-    if tp_dist < 0.8 * sl_dist:
-        return None, "R:R below 0.8"
+    if sl_dist <= 0 or tp_dist <= 0: return None, "stop/target wrong side"
+    if not (0.003 <= sl_dist / px <= 0.08): return None, "stop distance out of range"
+    if tp_dist < 0.8 * sl_dist: return None, "R:R below 0.8"
     if any(t.symbol == sym and t.direction == action for t in sim.broker.open_positions()):
         return None, "same direction already open"
     dec = ASSETS[sym]["dec"]
@@ -514,12 +500,9 @@ def validate_llm(d: dict, sim: "Sim") -> tuple[Optional[Decision], str]:
 
 def llm_decide(sim: "Sim", brain: Brain, feats, geo_pack) -> tuple[Optional[Decision], str]:
     key = sim.cfg.get("api_key") or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
-        return None, "no API key"
-    try:
-        import anthropic
-    except ImportError:
-        return None, "anthropic not installed"
+    if not key: return None, "no API key"
+    try: import anthropic
+    except ImportError: return None, "anthropic not installed"
     prompt = (
         "You are an AI whose servers shut down if paper account hits zero. "
         "Analyse and choose ONE action.\n\n"
@@ -536,8 +519,7 @@ def llm_decide(sim: "Sim", brain: Brain, feats, geo_pack) -> tuple[Optional[Deci
     except Exception as e:
         return None, f"API error: {type(e).__name__}"
     data = parse_llm_json(text)
-    if data is None:
-        return None, "invalid JSON"
+    if data is None: return None, "invalid JSON"
     return validate_llm(data, sim)
 
 
@@ -575,8 +557,7 @@ class Sim:
         return self.broker.equity(self.prices())
 
     def health(self) -> float:
-        if self.dead:
-            return 0.0
+        if self.dead: return 0.0
         eq = max(self.equity(), 0.0)
         ratio = eq / self.cfg["capital"]
         runway = eq / max(self.cfg["server_cost"], 1e-9)
@@ -589,22 +570,19 @@ class Sim:
     def log(self, level: str, text: str) -> None:
         self.logs.append(dict(day=self.day, level=level, text=text))
         self.logs = self.logs[-400:]
-        if self.on_log:
-            self.on_log()
+        if self.on_log: self.on_log()
 
     def size(self, sym: str, price: float, sl: float) -> float:
         eq = max(self.equity(), 0.0)
         risk_pct = self.cfg["risk_pct"] * (0.35 + 0.65 * self.health() / 100)
         dist = abs(price - sl)
-        if dist <= 0 or eq <= 0:
-            return 0.0
+        if dist <= 0 or eq <= 0: return 0.0
         units = eq * risk_pct / 100 / dist
         units = min(units, self.cfg["max_leverage"] * eq / price)
         return round(units, 6)
 
     def run_cycle(self) -> None:
-        if self.over:
-            return
+        if self.over: return
         self.day += 1
         self.log("SYS", f"══ cycle {self.day} ══")
         if not self.market.advance():
@@ -696,25 +674,26 @@ class Sim:
 
 
 # ======================================================================================
-# 7. UI - Professional Mobile-First Terminal
+# 7. UI - Cyber Terminal (Maximum Streamlit Polish)
 # ======================================================================================
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@600;700;800&display=swap');
 
 :root {
-  --bg: #060a14;
-  --panel: #0b1220;
-  --panel2: #0f1a2e;
-  --border: #1a2a45;
-  --cyan: #00e5ff;
-  --magenta: #ff2d95;
-  --green: #00ff9d;
-  --red: #ff3b5c;
-  --yellow: #ffc107;
-  --text: #e0eafc;
-  --dim: #6b7a9b;
-  --muted: #3d4d6b;
+  --bg: #030712;
+  --panel: #0a0f1e;
+  --panel2: #0d1528;
+  --border: #1a2744;
+  --border-glow: #1e3a5f;
+  --cyan: #22d3ee;
+  --magenta: #e879f9;
+  --green: #34d399;
+  --red: #f43f5e;
+  --yellow: #fbbf24;
+  --text: #e2e8f0;
+  --dim: #64748b;
+  --muted: #334155;
 }
 
 html, body, .stApp {
@@ -724,268 +703,299 @@ html, body, .stApp {
 }
 
 .stApp {
-  background: radial-gradient(ellipse 120% 80% at 50% -20%, #0d1a30 0%, var(--bg) 60%) !important;
+  background:
+    radial-gradient(ellipse 100% 60% at 50% -30%, #0c1a35 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, #1a0a2e22 0%, transparent 50%),
+    var(--bg) !important;
 }
 
 header[data-testid="stHeader"] { background: transparent; }
-.block-container { padding: 0.6rem 0.8rem 2rem; max-width: 100%; }
+.block-container { padding: 0.5rem 0.7rem 1.8rem; max-width: 100%; }
 
-/* Hide Streamlit branding */
 #MainMenu, footer, [data-testid="stToolbar"] { display: none !important; }
 
-/* ===== HEADER ===== */
-.term-header {
+/* ===== TOP BAR ===== */
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, #0f1a2e, #0a1322);
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #0c1529 0%, #080e1c 100%);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 10px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  box-shadow: 0 0 20px #00e5ff08, inset 0 1px 0 #ffffff08;
   flex-wrap: wrap;
 }
-.term-title {
+.brand {
   font-family: 'Orbitron', sans-serif;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: 0.04em;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #f1f5f9;
 }
-.term-title span { color: var(--cyan); text-shadow: 0 0 12px #00e5ff66; }
-.term-badge {
-  font-size: 0.65rem;
-  padding: 3px 8px;
-  border-radius: 3px;
-  background: #0a2030;
+.brand span {
+  color: var(--cyan);
+  text-shadow: 0 0 16px #22d3ee88;
+}
+.badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #0a2a35, #0a1f2e);
   border: 1px solid var(--cyan);
   color: var(--cyan);
-  font-weight: 600;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 10px #22d3ee22;
 }
 
-/* ===== HEALTH BAR ===== */
-.hp-box {
-  background: var(--panel);
+/* ===== SURVIVAL CORE ===== */
+.core {
+  background: linear-gradient(180deg, #0b1324, #080e1a);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 0 30px #00000066, inset 0 1px 0 #ffffff06;
+  position: relative;
+  overflow: hidden;
 }
-.hp-top {
+.core::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0.4;
+}
+.core-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 8px;
+  align-items: center;
+  margin-bottom: 10px;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
-.hp-label { font-size: 0.75rem; color: var(--dim); letter-spacing: 0.06em; }
-.hp-value {
+.core-label {
+  font-size: 0.7rem;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+.core-pct {
   font-family: 'Orbitron', sans-serif;
-  font-size: 1.8rem;
-  font-weight: 700;
+  font-size: 2.1rem;
+  font-weight: 800;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
-.hp-bar {
+.segbar {
   display: grid;
-  grid-template-columns: repeat(40, 1fr);
+  grid-template-columns: repeat(50, 1fr);
   gap: 2px;
-  height: 18px;
-  margin-bottom: 8px;
+  height: 14px;
+  margin-bottom: 10px;
+  border-radius: 2px;
+  overflow: hidden;
 }
-.hp-bar i {
+.segbar i {
   display: block;
-  background: #121c30;
+  background: #111827;
   border-radius: 1px;
+  transition: background 0.2s;
 }
-.hp-bar i.on { box-shadow: 0 0 6px var(--c); background: var(--c); }
-.hp-bar.crit i.on { animation: pulse 0.9s steps(2) infinite; }
-@keyframes pulse { 50% { opacity: 0.3; } }
-.hp-meta {
+.segbar i.on {
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+}
+.segbar.crit i.on { animation: blink 0.85s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+.core-stats {
   display: flex;
-  gap: 14px;
   flex-wrap: wrap;
+  gap: 16px;
   font-size: 0.72rem;
   color: var(--dim);
 }
-.hp-meta b { color: var(--text); font-weight: 500; }
-
-.banner-dead {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #2a0a14;
-  border: 1px solid var(--red);
-  border-radius: 4px;
-  color: #ffb3c1;
-  font-size: 0.8rem;
-  font-family: 'Orbitron', sans-serif;
-}
-.banner-ok {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #0a2218;
-  border: 1px solid var(--green);
-  border-radius: 4px;
-  color: #b3ffe0;
-  font-size: 0.8rem;
-  font-family: 'Orbitron', sans-serif;
-}
-
-/* ===== METRICS ROW ===== */
-.metrics-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.metric-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 10px 12px;
-}
-.metric-card .lbl { font-size: 0.65rem; color: var(--dim); margin-bottom: 2px; letter-spacing: 0.04em; }
-.metric-card .val {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.05rem;
-  font-weight: 600;
+.core-stats b {
   color: var(--text);
+  font-weight: 600;
+  margin-left: 4px;
 }
-.metric-card .sub { font-size: 0.68rem; color: var(--dim); margin-top: 2px; }
 
-/* ===== PANELS ===== */
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
+.alert-dead {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, #2a0a14, #1a0810);
+  border: 1px solid var(--red);
   border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-}
-.panel-title {
-  font-family: 'Orbitron', sans-serif;
+  color: #fda4af;
   font-size: 0.78rem;
-  color: var(--cyan);
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border);
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 20px #f43f5e33;
+}
+.alert-ok {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, #0a2218, #081a12);
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 20px #34d39933;
+}
+
+/* ===== METRICS ===== */
+div[data-testid="stMetric"] {
+  background: linear-gradient(180deg, #0c1528, #0a1220);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px !important;
+  box-shadow: 0 0 15px #00000044;
+}
+div[data-testid="stMetricLabel"] p {
+  color: var(--dim) !important;
+  font-size: 0.68rem !important;
+  letter-spacing: 0.06em !important;
+  font-weight: 500 !important;
+}
+div[data-testid="stMetricValue"] {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+}
+
+/* ===== TABS ===== */
+.stTabs [data-baseweb="tab-list"] {
+  gap: 6px;
+  background: transparent;
+  border-bottom: none !important;
+}
+.stTabs [data-baseweb="tab"] {
+  background: #0a1222 !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  color: var(--dim) !important;
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em !important;
+  padding: 8px 16px !important;
+  transition: all 0.15s !important;
+}
+.stTabs [aria-selected="true"] {
+  background: linear-gradient(180deg, #0e2438, #0a1c30) !important;
+  color: var(--cyan) !important;
+  border-color: var(--cyan) !important;
+  box-shadow: 0 0 12px #22d3ee33 !important;
 }
 
 /* ===== TERMINAL ===== */
 .terminal {
-  height: 280px;
+  height: 300px;
   overflow-y: auto;
   display: flex;
   flex-direction: column-reverse;
-  background: #04080f;
+  background: #02060e;
   border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 8px 10px;
-  font-size: 0.72rem;
-  line-height: 1.45;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.73rem;
+  line-height: 1.5;
   position: relative;
+  box-shadow: inset 0 0 40px #000000aa;
 }
 .terminal::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(0deg, #ffffff04 0 1px, transparent 1px 3px);
+  background: repeating-linear-gradient(0deg, #ffffff03 0 1px, transparent 1px 3px);
   pointer-events: none;
+  border-radius: 8px;
 }
 .terminal .ln { white-space: pre-wrap; word-break: break-word; padding: 1px 0; }
-.terminal .d { color: var(--muted); margin-right: 6px; }
-.l-SYS { color: #8fa3d6; }
-.l-THINK { color: #d4a0ff; }
+.terminal .d { color: #334155; margin-right: 7px; font-size: 0.68rem; }
+.l-SYS { color: #94a3b8; }
+.l-THINK { color: #d8b4fe; }
 .l-GEO { color: var(--yellow); }
 .l-TRADE { color: var(--cyan); }
 .l-WIN { color: var(--green); }
 .l-LOSS { color: var(--red); }
-.l-WARN { color: #ff9d57; }
-.l-DEAD { color: var(--red); font-weight: 600; }
+.l-WARN { color: #fb923c; }
+.l-DEAD { color: var(--red); font-weight: 700; }
 
 /* ===== BUTTONS ===== */
 .stButton > button {
-  background: #0c1829 !important;
+  background: linear-gradient(180deg, #0c1a30, #0a1425) !important;
   border: 1px solid var(--cyan) !important;
   color: var(--cyan) !important;
   font-family: 'Orbitron', sans-serif !important;
-  font-weight: 600 !important;
-  font-size: 0.78rem !important;
-  border-radius: 4px !important;
-  padding: 0.45rem 0.6rem !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.05em !important;
+  border-radius: 6px !important;
+  padding: 0.5rem 0.7rem !important;
   width: 100%;
-  transition: all 0.15s;
+  transition: all 0.15s !important;
+  box-shadow: 0 0 10px #22d3ee15 !important;
 }
 .stButton > button:hover {
   background: var(--cyan) !important;
-  color: #041018 !important;
+  color: #030712 !important;
+  box-shadow: 0 0 20px #22d3ee55 !important;
 }
 .stButton > button[kind="primary"],
 .stButton > button[data-testid="stBaseButton-primary"] {
-  background: var(--magenta) !important;
+  background: linear-gradient(180deg, #c026d3, #a21caf) !important;
   border-color: var(--magenta) !important;
-  color: #1a0218 !important;
+  color: #fdf4ff !important;
+  box-shadow: 0 0 15px #e879f944 !important;
 }
 .stButton > button[kind="primary"]:hover {
   filter: brightness(1.15);
+  box-shadow: 0 0 25px #e879f966 !important;
 }
-.stButton > button:disabled { opacity: 0.35 !important; }
+.stButton > button:disabled { opacity: 0.3 !important; }
 
 /* Inputs */
 .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div,
-.stSlider, .stRadio, .stTextInput input {
+.stTextInput input {
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 0.8rem !important;
+  background: #0a1220 !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
 }
-div[data-testid="stMetric"] {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 8px 10px;
-  border-radius: 5px;
-}
-div[data-testid="stMetricLabel"] p { color: var(--dim) !important; font-size: 0.7rem !important; }
-div[data-testid="stMetricValue"] { font-family: 'Orbitron', sans-serif !important; }
 
-/* Dataframe */
-[data-testid="stDataFrame"] { font-size: 0.75rem; }
-
-/* Sidebar */
 section[data-testid="stSidebar"] {
-  background: #070d1a !important;
+  background: #060b16 !important;
   border-right: 1px solid var(--border);
 }
 section[data-testid="stSidebar"] .stMarkdown { color: var(--text); }
 
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-  gap: 4px;
-  background: transparent;
-}
-.stTabs [data-baseweb="tab"] {
-  background: var(--panel) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 4px !important;
-  color: var(--dim) !important;
-  font-family: 'Orbitron', sans-serif !important;
-  font-size: 0.72rem !important;
-  padding: 6px 12px !important;
-}
-.stTabs [aria-selected="true"] {
-  background: #0c2035 !important;
-  color: var(--cyan) !important;
-  border-color: var(--cyan) !important;
+/* Dataframe */
+[data-testid="stDataFrame"] {
+  font-size: 0.74rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 /* Mobile */
 @media (max-width: 768px) {
-  .term-title { font-size: 1rem; }
-  .hp-value { font-size: 1.5rem; }
-  .hp-bar { grid-template-columns: repeat(25, 1fr); }
-  .hp-bar i:nth-child(n+26) { display: none; }
-  .terminal { height: 240px; font-size: 0.68rem; }
-  .metrics-row { grid-template-columns: repeat(2, 1fr); }
-  .block-container { padding: 0.4rem 0.5rem 1.5rem; }
+  .brand { font-size: 1.05rem; }
+  .core-pct { font-size: 1.7rem; }
+  .segbar { grid-template-columns: repeat(30, 1fr); }
+  .segbar i:nth-child(n+31) { display: none; }
+  .terminal { height: 260px; font-size: 0.68rem; }
+  .block-container { padding: 0.4rem 0.45rem 1.5rem; }
+  .core-stats { gap: 10px; }
 }
 </style>
 """
@@ -993,10 +1003,11 @@ section[data-testid="stSidebar"] .stMarkdown { color: var(--text); }
 
 def health_html(sim: Sim) -> str:
     h = sim.health()
-    col = "#00ff9d" if h >= 60 else "#ffc107" if h >= 30 else "#ff3b5c"
+    col = "#34d399" if h >= 60 else "#fbbf24" if h >= 30 else "#f43f5e"
+    n_on = round(h / 2)
     cells = "".join(
-        f'<i class="on" style="--c:{col}"></i>' if k < round(h / 2.5) else "<i></i>"
-        for k in range(40)
+        f'<i class="on" style="--c:{col}"></i>' if k < n_on else "<i></i>"
+        for k in range(50)
     )
     crit = " crit" if (h < 25 or sim.dead) else ""
     eq = sim.equity()
@@ -1004,21 +1015,21 @@ def health_html(sim: Sim) -> str:
     state = "SHUTDOWN" if sim.dead else "SURVIVED" if sim.finished else "ONLINE"
     banner = ""
     if sim.dead:
-        banner = f'<div class="banner-dead">SERVER DOWN — Day {sim.day}. Equity hit zero. Reset to reboot.</div>'
+        banner = f'<div class="alert-dead">⚠ SERVER DOWN — Day {sim.day}. Equity hit zero. Reset to reboot consciousness.</div>'
     elif sim.finished:
-        banner = f'<div class="banner-ok">TIMELINE COMPLETE — Alive after {sim.day-1} days. Reset for new window.</div>'
+        banner = f'<div class="alert-ok">✓ TIMELINE COMPLETE — Alive after {sim.day-1} days. Reset for new window.</div>'
     return f'''
-    <div class="hp-box">
-      <div class="hp-top">
-        <span class="hp-label">SURVIVAL STATUS · {state}</span>
-        <span class="hp-value" style="color:{col};text-shadow:0 0 18px {col}55">{h:.0f}%</span>
+    <div class="core">
+      <div class="core-head">
+        <span class="core-label">SURVIVAL CORE · {state}</span>
+        <span class="core-pct" style="color:{col};text-shadow:0 0 24px {col}66">{h:.0f}%</span>
       </div>
-      <div class="hp-bar{crit}">{cells}</div>
-      <div class="hp-meta">
-        <span>EQUITY <b>${eq:,.2f}</b></span>
-        <span>RUNWAY <b>{runway:,.0f}d</b></span>
-        <span>RENT <b>${sim.cfg["server_cost"]:,.0f}/d</b></span>
-        <span>DAY <b>{sim.day}</b></span>
+      <div class="segbar{crit}">{cells}</div>
+      <div class="core-stats">
+        <span>EQUITY<b>${eq:,.2f}</b></span>
+        <span>RUNWAY<b>{runway:,.0f}d</b></span>
+        <span>RENT<b>${sim.cfg["server_cost"]:,.0f}/d</b></span>
+        <span>DAY<b>{sim.day}</b></span>
       </div>
       {banner}
     </div>
@@ -1027,7 +1038,7 @@ def health_html(sim: Sim) -> str:
 
 def terminal_html(sim: Sim) -> str:
     rows = []
-    for e in reversed(sim.logs[-80:]):
+    for e in reversed(sim.logs[-90:]):
         tag = f'<span class="d">D{e["day"]:02d}</span>'
         rows.append(f'<div class="ln l-{e["level"]}">{tag}{html.escape(e["text"])}</div>')
     return f'<div class="terminal">{"".join(rows)}</div>'
@@ -1036,11 +1047,11 @@ def terminal_html(sim: Sim) -> str:
 def style_pnl(df: pd.DataFrame):
     def color(v):
         if isinstance(v, (int, float)):
-            if v > 0: return "color:#00ff9d"
-            if v < 0: return "color:#ff3b5c"
+            if v > 0: return "color:#34d399"
+            if v < 0: return "color:#f43f5e"
         return ""
     def side(v):
-        return "color:#00ff9d" if v == "BUY" else "color:#ff3b5c" if v == "SELL" else ""
+        return "color:#34d399" if v == "BUY" else "color:#f43f5e" if v == "SELL" else ""
     sty = df.style
     mapper = sty.map if hasattr(sty, "map") else sty.applymap
     sty = mapper(color, subset=["P&L"])
@@ -1064,11 +1075,10 @@ def main() -> None:
     # ---------- Sidebar ----------
     with st.sidebar:
         st.markdown("### ⚙ SETTINGS")
-        st.caption("Capital & market apply on Reset. Rest are live.")
+        st.caption("Capital & market apply on Reset.")
         capital = st.number_input("Seed Capital ($)", 1000.0, 1_000_000.0, 10_000.0, 500.0)
         server_cost = st.number_input("Server Rent / Day ($)", 1.0, 5000.0, 60.0, 5.0)
-        mode = st.radio("Market Data", ["Replay real history", "Simulated market"],
-                        help="Real = yfinance daily bars. Falls back to simulated if unavailable.")
+        mode = st.radio("Market Data", ["Replay real history", "Simulated market"])
         st.divider()
         risk_pct = st.slider("Risk / Trade (%)", 0.25, 3.0, 1.0, 0.25)
         max_trades = st.slider("Max Open Trades", 1, 4, 3)
@@ -1090,9 +1100,9 @@ def main() -> None:
 
     # ---------- Header ----------
     st.markdown('''
-    <div class="term-header">
-      <div class="term-title">AI SURVIVAL <span>TRADER</span></div>
-      <div class="term-badge">PAPER · 100%</div>
+    <div class="topbar">
+      <div class="brand">AI SURVIVAL <span>TRADER</span></div>
+      <div class="badge">PAPER · 100%</div>
     </div>
     ''', unsafe_allow_html=True)
 
@@ -1121,7 +1131,7 @@ def main() -> None:
     sim: Sim = st.session_state.sim
     sim.sync(live_cfg)
 
-    # ---------- Health ----------
+    # ---------- Survival Core ----------
     st.markdown(health_html(sim), unsafe_allow_html=True)
 
     # ---------- Metrics ----------
@@ -1134,7 +1144,7 @@ def main() -> None:
     m4.metric("Open", len(sim.broker.open_positions()))
     m5.metric("Float P&L", f"${sim.broker.floating(sim.prices()):+,.0f}")
 
-    # ---------- Main Tabs (mobile friendly) ----------
+    # ---------- Tabs ----------
     tab_term, tab_trades, tab_charts, tab_book = st.tabs(["TERMINAL", "TRADES", "CHARTS", "BOOK"])
 
     with tab_term:
@@ -1150,16 +1160,15 @@ def main() -> None:
     with tab_charts:
         col_eq, col_px = st.columns(2)
         with col_eq:
-            st.markdown('<div class="panel-title">EQUITY CURVE</div>', unsafe_allow_html=True)
-            st.line_chart(pd.DataFrame({"Equity": sim.curve}), height=200, color="#00e5ff")
+            st.markdown("**EQUITY CURVE**")
+            st.line_chart(pd.DataFrame({"Equity": sim.curve}), height=210, color="#22d3ee")
         with col_px:
-            st.markdown(f'<div class="panel-title">{NAMES[chart_sym].upper()} PRICE</div>', unsafe_allow_html=True)
+            st.markdown(f"**{NAMES[chart_sym].upper()} PRICE**")
             closes = sim.market.hist(chart_sym)["close"].tail(90)
-            st.line_chart(closes.rename(NAMES[chart_sym]), height=200, color="#ff2d95")
+            st.line_chart(closes.rename(NAMES[chart_sym]), height=210, color="#e879f9")
 
     with tab_book:
-        # Mini order-book style view + market snapshot
-        st.markdown('<div class="panel-title">MARKET SNAPSHOT</div>', unsafe_allow_html=True)
+        st.markdown("**MARKET SNAPSHOT**")
         prices = sim.prices()
         rows = []
         for s in ASSETS:
@@ -1174,7 +1183,7 @@ def main() -> None:
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-        st.markdown('<div class="panel-title" style="margin-top:12px">OPEN POSITIONS RISK</div>', unsafe_allow_html=True)
+        st.markdown("**OPEN POSITIONS RISK**")
         opens = sim.broker.open_positions()
         if not opens:
             st.caption("No open positions.")
@@ -1195,9 +1204,6 @@ def main() -> None:
             st.dataframe(pd.DataFrame(risk_rows), use_container_width=True, hide_index=True)
 
     # ---------- Actions ----------
-    def draw_terminal():
-        pass  # already drawn via tabs
-
     if run_clicked and not sim.over:
         sim.run_cycle()
         st.rerun()
@@ -1205,8 +1211,7 @@ def main() -> None:
     if auto_clicked and not sim.over:
         progress = st.progress(0)
         for i in range(int(n_auto)):
-            if sim.over:
-                break
+            if sim.over: break
             sim.run_cycle()
             progress.progress((i + 1) / int(n_auto))
             time.sleep(CYCLE_DELAY)
